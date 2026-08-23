@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PacketLens — Packet Capture Analysis</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: 'Segoe UI', ui-sans-serif, system-ui, sans-serif; }
+  .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 0.75rem; }
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+<header class="bg-slate-900 text-white">
+  <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-cyan-500 flex items-center justify-center font-bold text-slate-900">PL</div>
+      <div>
+        <h1 class="text-xl font-semibold tracking-tight">PacketLens</h1>
+        <p class="text-xs text-slate-400 -mt-0.5">Packet capture analysis &amp; anomaly detection</p>
+      </div>
+    </div>
+    <a href="https://github.com/" target="_blank" class="text-sm text-slate-400 hover:text-white transition hidden sm:block">Built with Scapy · Flask · Chart.js</a>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+  <!-- Upload card -->
+  <section class="card p-6">
+    <h2 class="text-lg font-semibold mb-1">Upload a capture</h2>
+    <p class="text-sm text-slate-500 mb-4">Upload a <code class="bg-slate-100 px-1 rounded">.pcap</code> or <code class="bg-slate-100 px-1 rounded">.pcapng</code> file. Don't have one? Run <code class="bg-slate-100 px-1 rounded">python generate_sample_pcap.py</code> to create a synthetic demo capture with an injected port scan.</p>
+    <form id="upload-form" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+      <input id="file-input" name="file" type="file" accept=".pcap,.pcapng,.cap"
+             class="flex-1 text-sm border border-slate-300 rounded-lg px-3 py-2 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-cyan-600 file:text-white file:text-sm file:font-medium hover:file:bg-cyan-700 cursor-pointer" />
+      <button id="upload-btn" type="submit"
+              class="bg-slate-900 hover:bg-slate-700 text-white font-medium px-5 py-2 rounded-lg transition disabled:opacity-50">
+        Analyze capture
+      </button>
+    </form>
+    <div id="status" class="mt-3 text-sm"></div>
+  </section>
+
+  <div id="results" class="space-y-8 hidden">
+
+    <!-- Stat tiles -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="card p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400 font-medium">Total packets</p>
+        <p id="stat-total" class="text-3xl font-bold mt-1 text-slate-900">—</p>
+      </div>
+      <div class="card p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400 font-medium">Protocols seen</p>
+        <p id="stat-protocols" class="text-3xl font-bold mt-1 text-slate-900">—</p>
+      </div>
+      <div class="card p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400 font-medium">Unique source IPs</p>
+        <p id="stat-sources" class="text-3xl font-bold mt-1 text-slate-900">—</p>
+      </div>
+      <div class="card p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400 font-medium">Findings</p>
+        <p id="stat-findings" class="text-3xl font-bold mt-1 text-slate-900">—</p>
+      </div>
+    </section>
+
+    <!-- Findings -->
+    <section class="card p-6">
+      <h2 class="text-lg font-semibold mb-4">Findings</h2>
+      <div id="findings-list" class="space-y-3"></div>
+    </section>
+
+    <!-- Charts -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="card p-6">
+        <h2 class="text-lg font-semibold mb-4">Protocol breakdown</h2>
+        <canvas id="protocol-chart" height="220"></canvas>
+      </div>
+      <div class="card p-6">
+        <h2 class="text-lg font-semibold mb-4">Traffic over time</h2>
+        <canvas id="timeline-chart" height="220"></canvas>
+      </div>
+    </section>
+
+    <!-- Tables -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="card p-6">
+        <h2 class="text-base font-semibold mb-3">Top 10 source IPs</h2>
+        <table class="w-full text-sm"><thead><tr class="text-left text-slate-400 border-b"><th class="pb-2">IP</th><th class="pb-2 text-right">Packets</th></tr></thead><tbody id="table-sources"></tbody></table>
+      </div>
+      <div class="card p-6">
+        <h2 class="text-base font-semibold mb-3">Top 10 destination IPs</h2>
+        <table class="w-full text-sm"><thead><tr class="text-left text-slate-400 border-b"><th class="pb-2">IP</th><th class="pb-2 text-right">Packets</th></tr></thead><tbody id="table-destinations"></tbody></table>
+      </div>
+      <div class="card p-6">
+        <h2 class="text-base font-semibold mb-3">Top talkers by bytes</h2>
+        <table class="w-full text-sm"><thead><tr class="text-left text-slate-400 border-b"><th class="pb-2">IP</th><th class="pb-2 text-right">Bytes</th></tr></thead><tbody id="table-talkers"></tbody></table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="max-w-7xl mx-auto px-6 py-8 text-center text-xs text-slate-400">
+  PacketLens — portfolio project by Hanaan Mir
+</footer>
+
+<script>
+let protocolChart, timelineChart;
+
+const form = document.getElementById('upload-form');
+const statusEl = document.getElementById('status');
+const uploadBtn = document.getElementById('upload-btn');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fileInput = document.getElementById('file-input');
+  if (!fileInput.files.length) {
+    statusEl.textContent = 'Please choose a .pcap or .pcapng file first.';
+    statusEl.className = 'mt-3 text-sm text-red-600';
+    return;
+  }
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  uploadBtn.disabled = true;
+  statusEl.textContent = 'Parsing capture with Scapy…';
+  statusEl.className = 'mt-3 text-sm text-slate-500';
+
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.error || 'Upload failed.');
+    }
+    statusEl.textContent = `Parsed ${data.summary.total_packets} packets from ${data.filename}.`;
+    statusEl.className = 'mt-3 text-sm text-emerald-600';
+    renderResults(data);
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.className = 'mt-3 text-sm text-red-600';
+  } finally {
+    uploadBtn.disabled = false;
+  }
+});
+
+function renderResults(data) {
+  document.getElementById('results').classList.remove('hidden');
+  const s = data.summary;
+  const a = data.anomalies;
+
+  document.getElementById('stat-total').textContent = s.total_packets.toLocaleString();
+  document.getElementById('stat-protocols').textContent = Object.keys(s.protocol_breakdown).length;
+  document.getElementById('stat-sources').textContent = s.top_sources.length ? new Set(s.top_sources.map(r => r.value)).size + '+' : '0';
+  document.getElementById('stat-findings').textContent = a.count;
+
+  renderFindings(a.findings);
+  renderProtocolChart(s.protocol_breakdown);
+  renderTimelineChart(s.traffic_over_time);
+  renderTable('table-sources', s.top_sources, 'count');
+  renderTable('table-destinations', s.top_destinations, 'count');
+  renderTalkersTable(s.top_talkers_bytes);
+}
+
+function renderFindings(findings) {
+  const el = document.getElementById('findings-list');
+  el.innerHTML = '';
+  if (!findings.length) {
+    el.innerHTML = '<p class="text-sm text-slate-500">No anomalies detected in this capture. Traffic patterns look normal.</p>';
+    return;
+  }
+  findings.forEach(f => {
+    const badgeColor = f.type === 'port_scan' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800';
+    const label = f.type === 'port_scan' ? 'Port Scan' : 'Flood / Volumetric';
+    const evidenceRows = Object.entries(f.evidence).map(([k, v]) => `<span class="mr-4"><span class="text-slate-400">${k.replaceAll('_',' ')}:</span> <span class="font-medium">${v}</span></span>`).join('');
+    const div = document.createElement('div');
+    div.className = 'border border-slate-200 rounded-lg p-4';
+    div.innerHTML = `
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${badgeColor}">${label}</span>
+        <span class="text-sm font-medium">${f.src_ip} → ${f.dst_ip}</span>
+      </div>
+      <p class="text-sm text-slate-600 mb-2">${f.message}</p>
+      <div class="text-xs text-slate-500 flex flex-wrap">${evidenceRows}</div>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function renderProtocolChart(breakdown) {
+  const ctx = document.getElementById('protocol-chart');
+  const labels = Object.keys(breakdown);
+  const values = Object.values(breakdown);
+  if (protocolChart) protocolChart.destroy();
+  protocolChart = new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: ['#0891b2', '#f59e0b', '#dc2626', '#7c3aed', '#16a34a', '#64748b'],
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function renderTimelineChart(series) {
+  const ctx = document.getElementById('timeline-chart');
+  const labels = series.map(p => new Date(p.bucket_start * 1000).toLocaleTimeString());
+  const values = series.map(p => p.count);
+  if (timelineChart) timelineChart.destroy();
+  timelineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Packets',
+        data: values,
+        borderColor: '#0891b2',
+        backgroundColor: 'rgba(8,145,178,0.15)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: { x: { ticks: { maxTicksLimit: 8 } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function renderTable(id, rows) {
+  const tbody = document.getElementById(id);
+  tbody.innerHTML = rows.map(r => `<tr class="border-b border-slate-100"><td class="py-1.5">${r.value}</td><td class="py-1.5 text-right font-medium">${r.count}</td></tr>`).join('');
+}
+
+function renderTalkersTable(rows) {
+  const tbody = document.getElementById('table-talkers');
+  tbody.innerHTML = rows.map(r => `<tr class="border-b border-slate-100"><td class="py-1.5">${r.ip}</td><td class="py-1.5 text-right font-medium">${r.bytes.toLocaleString()}</td></tr>`).join('');
+}
+</script>
+
+</body>
+</html>

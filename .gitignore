@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+sample_data/*.pcap
+!sample_data/.gitkeep
+*.log
