@@ -1,6 +1,7 @@
 # PacketLens
 
 [![Portfolio Projects](https://img.shields.io/badge/Portfolio-Projects-2088FF?style=flat-square&logo=github&logoColor=white)](https://github.com/users/hanaanmir17/projects/2)
+[![CI](https://github.com/hanaanmir17/packetlens/actions/workflows/ci.yml/badge.svg)](https://github.com/hanaanmir17/packetlens/actions/workflows/ci.yml)
 
 A packet capture analysis web tool. Upload a `.pcap` / `.pcapng` file and PacketLens parses it with Scapy, builds a traffic dashboard, and automatically flags suspicious behavior like port scans and traffic floods.
 
