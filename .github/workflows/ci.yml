@@ -16,6 +16,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
 
       # Reading pcap files with Scapy does not require raw-socket
       # privileges (only live capture does), so this works fine in CI.
